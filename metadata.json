@@ -1,0 +1,7 @@
+{
+  "name": "AI Voice Sales Trainer",
+  "description": "Practice your sales pitches with an AI-powered prospective client. Choose different personalities and difficulty levels to hone your skills in a realistic, interactive voice conversation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

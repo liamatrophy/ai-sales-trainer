@@ -1,0 +1,52 @@
+# Cloud Build configuration for deploying to Cloud Run
+# Uses Secret Manager for API key - injected at RUNTIME, not build time
+
+steps:
+  # Step 1: Install dependencies
+  - name: 'node:20'
+    entrypoint: 'npm'
+    args: ['ci']
+
+  # Step 2: Build the Astro site (no secrets needed at build time)
+  - name: 'node:20'
+    entrypoint: 'npm'
+    args: ['run', 'build']
+
+  # Step 3: Build the Docker container
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/ai-sales-trainer:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/ai-sales-trainer:latest'
+      - '.'
+
+  # Step 4: Push to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ai-sales-trainer:$COMMIT_SHA']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ai-sales-trainer:latest']
+
+  # Step 5: Deploy to Cloud Run with secret mounted as env var
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ai-sales-trainer'
+      - '--image=gcr.io/$PROJECT_ID/ai-sales-trainer:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest'
+
+# Store images in Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/ai-sales-trainer:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/ai-sales-trainer:latest'
+
+# Build options
+options:
+  logging: CLOUD_LOGGING_ONLY

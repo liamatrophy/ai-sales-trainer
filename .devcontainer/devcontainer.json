@@ -1,0 +1,23 @@
+{
+    "name": "AI Sales Trainer",
+    "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {},
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+    "postCreateCommand": "apt-get update && apt-get install -y git openssh-client && npm install",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode",
+                "bradlc.vscode-tailwindcss"
+            ]
+        }
+    },
+    "forwardPorts": [
+        8080,
+        4321
+    ],
+    "remoteUser": "node"
+}
