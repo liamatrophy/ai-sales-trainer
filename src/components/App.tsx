@@ -23,7 +23,6 @@ import { TranscriptBubble } from './TranscriptBubble';
 import { Icon } from './Icon';
 import { MicCheck } from './MicCheck';
 import { ProductUpload } from './ProductUpload';
-import { CopilotToggle, CopilotHintBubble } from './CopilotHints';
 import { RankBadge } from './RankBadge';
 import { StageProgressBar } from './StageProgressBar';
 import { DynamicBattleCard } from './DynamicBattleCard';
@@ -66,8 +65,6 @@ export default function App() {
     const [difficulty, setDifficulty] = useState<Difficulty>(Difficulty.MEDIUM);
     const [selectedObjections, setSelectedObjections] = useState<ObjectionType[]>([]);
     const [productContext, setProductContext] = useState<string>('');
-    const [copilotEnabled, setCopilotEnabled] = useState(false);
-    const [copilotHint, setCopilotHint] = useState<string | null>(null); // Set by tool call
 
     // Session & Timer
     const [isSessionActive, setIsSessionActive] = useState(false);
@@ -113,12 +110,6 @@ export default function App() {
     const audioSourcesRef = useRef(new Set<AudioBufferSourceNode>());
 
     const transcriptEndRef = useRef<HTMLDivElement>(null);
-    const copilotEnabledRef = useRef(copilotEnabled); // Track for use in callback
-
-    // Keep ref in sync with state
-    useEffect(() => {
-        copilotEnabledRef.current = copilotEnabled;
-    }, [copilotEnabled]);
 
     // --- Effects ---
 
@@ -224,20 +215,6 @@ export default function App() {
         // 2. Handle Tool Calls (e.g. set_interest_level)
         if (message.toolCall?.functionCalls) {
             for (const fc of message.toolCall.functionCalls) {
-                // Handle coaching tip - arrives BEFORE AI speaks
-                if (fc.name === 'set_coaching_tip') {
-                    console.log('[Copilot] Received tip:', fc.args);
-                    if (copilotEnabledRef.current && fc.args.tip) {
-                        setCopilotHint(fc.args.tip);
-                    }
-                    // Always respond to prevent AI from waiting
-                    if (sessionRef.current) {
-                        sessionRef.current.sendToolResponse({
-                            functionResponses: [{ id: fc.id, name: fc.name, response: { result: "ok" } }]
-                        });
-                    }
-                }
-
                 // Handle interest level
                 if (fc.name === 'set_interest_level') {
                     const args = fc.args as { level: number };
@@ -296,12 +273,17 @@ export default function App() {
                 // Handle set_checklist_item (Dynamic Coach) - matches by item text
                 if (fc.name === 'set_checklist_item') {
                     const args = fc.args as { item_text: string; completed?: boolean };
+                    console.log('[Checklist] Received set_checklist_item:', args);
                     if (args.item_text) {
-                        setChecklistItems(prev => prev.map((item) =>
-                            item.label.toLowerCase().includes(args.item_text.toLowerCase())
-                                ? { ...item, completed: args.completed ?? true }
-                                : item
-                        ));
+                        setChecklistItems(prev => {
+                            const updated = prev.map((item) =>
+                                item.label.toLowerCase().includes(args.item_text.toLowerCase())
+                                    ? { ...item, completed: args.completed ?? true }
+                                    : item
+                            );
+                            console.log('[Checklist] Updated items:', updated.filter(i => i.completed).map(i => i.label));
+                            return updated;
+                        });
                     }
                     if (sessionRef.current) {
                         sessionRef.current.sendToolResponse({
@@ -614,19 +596,21 @@ export default function App() {
                                                 {isSelected && (
                                                     <div className="ml-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700 animate-in slide-in-from-top-2 duration-200">
                                                         <p className="text-xs text-orange-400 font-semibold mb-2">🎯 Select objections to practice:</p>
-                                                        <div className="grid grid-cols-1 gap-1.5">
-                                                            {Object.entries(OBJECTION_DETAILS).map(([objKey, objection]) => (
-                                                                <label key={objKey} className="flex items-center gap-2 p-2 rounded hover:bg-gray-700/50 cursor-pointer transition-colors">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={selectedObjections.includes(objKey as ObjectionType)}
-                                                                        onChange={() => handleObjectionToggle(objKey as ObjectionType)}
-                                                                        className="w-3.5 h-3.5 rounded border-gray-600 text-orange-500 focus:ring-offset-gray-900"
-                                                                    />
-                                                                    <span className="text-sm">{objection.icon}</span>
-                                                                    <span className="text-xs text-gray-400">{objection.label}</span>
-                                                                </label>
-                                                            ))}
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {Object.entries(OBJECTION_DETAILS).map(([objKey, objection]) => {
+                                                                const isObjSelected = selectedObjections.includes(objKey as ObjectionType);
+                                                                return (
+                                                                    <button
+                                                                        key={objKey}
+                                                                        onClick={() => handleObjectionToggle(objKey as ObjectionType)}
+                                                                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${isObjSelected
+                                                                            ? 'bg-orange-500 text-white shadow-sm'
+                                                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                                                                    >
+                                                                        {objection.icon} {OBJECTION_BUTTON_LABELS[objKey as ObjectionType]}
+                                                                    </button>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </div>
                                                 )}
@@ -743,10 +727,22 @@ export default function App() {
                             }}
                         />
 
-                        {/* Main Content Grid */}
-                        <div className="grid md:grid-cols-4 gap-4 flex-1 min-h-0">
-                            {/* Chat Area - 75% */}
-                            <div className="md:col-span-3 bg-gray-800/50 border border-gray-700 rounded-2xl flex flex-col overflow-hidden">
+                        {/* Main Content Grid - Mobile responsive */}
+                        <div className="flex flex-col md:grid md:grid-cols-4 gap-4 flex-1 min-h-0">
+                            {/* Dynamic Battle Card - Shows first on mobile */}
+                            <div className="order-1 md:order-2 md:col-span-1 max-h-48 md:max-h-none overflow-y-auto">
+                                <DynamicBattleCard
+                                    persona={persona}
+                                    currentStage={currentStage}
+                                    checklistItems={checklistItems}
+                                    difficulty={difficulty}
+                                    isAiSpeaking={isAiSpeaking}
+                                    volume={volume}
+                                />
+                            </div>
+
+                            {/* Chat Area - 75% on desktop */}
+                            <div className="order-2 md:order-1 md:col-span-3 bg-gray-800/50 border border-gray-700 rounded-2xl flex flex-col overflow-hidden flex-1">
                                 <div className="p-3 border-b border-gray-700 bg-gray-800/80 flex items-center justify-between">
                                     <h3 className="font-semibold text-sm text-gray-300 flex items-center gap-2">
                                         <Icon type="info" className="w-4 h-4" /> Live Call
@@ -801,18 +797,6 @@ export default function App() {
                                     </div>
                                     <span className="text-xs text-gray-400">Listening...</span>
                                 </div>
-                            </div>
-
-                            {/* Dynamic Battle Card - 25% */}
-                            <div className="md:col-span-1">
-                                <DynamicBattleCard
-                                    persona={persona}
-                                    currentStage={currentStage}
-                                    checklistItems={checklistItems}
-                                    difficulty={difficulty}
-                                    isAiSpeaking={isAiSpeaking}
-                                    volume={volume}
-                                />
                             </div>
                         </div>
                     </div>

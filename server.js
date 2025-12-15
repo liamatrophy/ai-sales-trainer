@@ -15,6 +15,14 @@ const SESSION_WARNING_MS = 8 * 60 * 1000; // Warn at 8 minutes
 const MAX_SESSIONS_PER_IP_PER_HOUR = 5;
 const MAX_DAILY_SESSIONS = 200; // Global daily cap (~$5-10/day safety valve)
 
+// Whitelisted IPs (unlimited sessions) - add your IP here
+const WHITELISTED_IPS = [
+    '127.0.0.1',
+    '::1',           // IPv6 localhost
+    'localhost',
+    '::ffff:127.0.0.1'
+];
+
 // Track sessions for rate limiting
 const ipSessionCounts = new Map(); // IP -> { count, resetTime }
 let dailySessionCount = 0;
@@ -30,6 +38,12 @@ function resetDailyCountIfNeeded() {
 
 function canStartSession(ip) {
     resetDailyCountIfNeeded();
+
+    // Whitelist check - skip all limits
+    if (WHITELISTED_IPS.includes(ip)) {
+        console.log(`Whitelisted IP ${ip} - bypassing rate limits`);
+        return { allowed: true };
+    }
 
     // Check global daily limit
     if (dailySessionCount >= MAX_DAILY_SESSIONS) {
@@ -78,7 +92,7 @@ const PERSONA_VOICES = {
     'Analytical Anna': 'Zephyr',
 };
 
-// Tool definitions for interest level, coaching tips, stage progression, and sentiment
+// Tool definitions for interest level, stage progression, and sentiment
 const tools = [
     {
         functionDeclarations: [
@@ -94,20 +108,6 @@ const tools = [
                         }
                     },
                     required: ["level"]
-                }
-            },
-            {
-                name: "set_coaching_tip",
-                description: "Provides a coaching tip for the sales rep on what they should say next. Call this BEFORE speaking your response.",
-                parameters: {
-                    type: "OBJECT",
-                    properties: {
-                        tip: {
-                            type: "STRING",
-                            description: "The exact words the sales rep should say in response. Keep it short and actionable."
-                        }
-                    },
-                    required: ["tip"]
                 }
             },
             {

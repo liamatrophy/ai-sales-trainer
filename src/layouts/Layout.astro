@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import FeedbackWidget from "../components/FeedbackWidget";
 
 interface Props {
     title?: string;
@@ -22,5 +23,6 @@ const { title = "AI Voice Sales Trainer" } = Astro.props;
     </head>
     <body class="bg-gray-900 text-white">
         <slot />
+        <FeedbackWidget client:load />
     </body>
 </html>
